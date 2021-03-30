@@ -1,0 +1,137 @@
+#!/bin/sh
+#exit if any command fails
+set -e
+#more advanced pattern matching
+shopt -s extglob
+
+###README
+# Restart Script for CP2K chainjobs that were killed or encountered some kind of error.
+#
+# You should not change the default name of restart files in the CP2K input, otherwise this will not work.
+# You can make CP2K print information to other files, e.g. Cell-Info during MD or GEOOPT, these files will just stay and be appended upon restart.
+# Set some things in the following section, everything else should be automatic.
+#
+#
+#
+
+######EDIT THESE
+#search string for steps
+#MD
+steps="MAX_STEPS"
+#GO
+#steps="MAX_ITER"
+
+#Hessian restart file name
+#Just leave it like that if you don't intend to use it.
+hessian_restart="hessian.restart"
+
+#Maximum number of restarts
+MAXCALC=50
+
+###REST SHOULD BE AUTOMATIC
+
+CURRENT=`pwd`
+BASENAME=`basename "$CURRENT"`
+NAME=$(basename *.run .run)
+echo "Jobname seems to be ${NAME}"
+
+INPUT="${NAME}.in"
+if [ ! -f ${INPUT} ]; then
+   echo "input file ${INPUT} missing!"
+   exit 1
+fi
+
+OUTPUT="${NAME}.out"
+SCRIPTNAME="${NAME}.run"
+RESTART="${NAME}-1.restart"
+
+MAXSTEPS=`cat ${INPUT} | grep ${steps} | sed 's/[^0-9]*//g'`
+
+if [ -f "number.txt" ]; then
+   typeset -i n=$(cat number.txt) || { echo 'getting number failed' ; exit 1; }
+else
+   n=0
+   echo $n > number.txt
+fi
+echo "Calculation number ${n}"
+if [ -f "step.txt" ]; then
+   typeset -i oldstep=$(cat step.txt) || { echo 'getting step failed' ; exit 1; }
+else
+   oldstep=0
+   echo $oldstep > step.txt
+fi
+echo "Previous step number ${oldstep}"
+
+#check output
+if [ "$(grep -c "GEOMETRY OPTIMIZATION COMPLETED" ${OUTPUT})" -ge "1" ];
+then
+   echo "GO completed"
+   exit 0
+fi
+if [ "$(grep -c "PROGRAM ENDED AT" ${OUTPUT})" -ge "1" ];
+then
+   echo "Program ended normally"
+   typeset -i step=$(grep "STEP_START_VAL" $RESTART | awk '{print $NF}') || { echo 'getting step failed' ; exit 1; }
+   echo $step > step.txt || { echo 'writing step failed' ; exit 1; }
+   if [ "$step" -le "$oldstep" ]; then
+      echo "Step did not increase during run - Problem!"
+      exit 1
+   fi
+   echo "Step Number: $step"
+   if [ "$step" -ge "$MAXSTEPS" ]; then
+      echo "Final step reached"
+      exit 0
+   fi
+else
+   echo "Non-normal program termination, trying to restart now."
+fi
+
+echo "Start moving files"
+
+#move files to subfolder $N
+mkdir ${n} || { echo 'mkdir ${n} failed' ; exit 1; }
+#find . -maxdepth 1 -type f  ! -name '*.txt' -exec mv {} ./${n}/ \; || { echo 'moving files failed' ; exit 1; }
+#create list of all files to move
+MVFILES=("${INPUT}" "slurm-"* "$OUTPUT")
+#regex have to be handled manually to avoid mv errors if they do not exist
+for f in "${NAME}"-*([0-9])_*([0-9]).restart; do
+   if [ -e "$f" ]; then
+      MVFILES+=("${NAME}-*([0-9])_*([0-9]).restart")
+   fi
+   break
+done
+for f in "${NAME}"-*([0-9]).restart.bak*; do
+   if [ -e "$f" ]; then
+      MVFILES+=("${NAME}-*([0-9]).restart.bak*")
+   fi
+   break
+done
+#now move the files
+for file in "${MVFILES[@]}"
+do
+   mv ${file} ./${n}/ || { echo 'mv ${file} failed' ; exit 1; }
+done
+
+#copy restart file to input
+cp "${RESTART}" "${INPUT}" || { echo 'copying restart to input failed' ; exit 1; }
+mv "${RESTART}" ./${n}/ || { echo 'moving restart file failed'; exit 1; }
+
+#activate hessian restart after first run if present
+if [ -f "${hessian_restart}" ]; then
+   if [ "${n}" -eq "0" ]; then
+      sed -i '/.*\&BFGS.*/a\       RESTART_HESSIAN  T\n       RESTART_FILE_NAME hessian.restart' ${INPUT}
+   fi
+fi
+
+
+#increase n and restart
+n=$((n+1))
+if [ "$n" -ge "$MAXCALC" ]; then
+   echo "MAXCALC reached, PROBLEM!"
+   exit 1
+fi
+echo $n > number.txt
+
+echo "Check everything and then submit the job."
+echo "Cheers!"
+exit 0

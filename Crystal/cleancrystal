@@ -1,0 +1,29 @@
+#! /bin/bash
+# Script to delete a lot of files after Crystal runs.
+# Deletes:
+# dffit3.dat
+# diis_Fg
+# *.pe*
+#
+#
+######################################################
+files=()
+#add individual files to delete
+tmp=("dffit3.dat" "diis_Fg")
+for f in "${tmp[@]}"; do
+   if [ -f "${f}" ]; then
+      files+=("${f}")
+   fi
+done
+#add wildcards if they exist
+for f in *.pe*; do
+   if [ -e "$f" ]; then
+      files+=("*.pe*")
+   fi
+   break
+done
+#now delete those
+for f in "${files[@]}"
+do
+   rm ${f}
+done
