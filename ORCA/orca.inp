@@ -1,0 +1,23 @@
+! RKS PBE D3BJ ABC def2-SVP Opt VerySlowConv TightSCF Grid5 NoFinalGrid
+%pal
+    nprocs $ORCANPROCS
+end
+%maxcore $ORCAMEM
+%scf
+   Guess MORead
+   MOInp "restart.gbw"
+   MaxIter 500
+   ConvCheckMode 2
+   Damp fac 0.9 ErrOff 0.05 Min 0.1 Max 0.99 end
+   Shift Shift 0.5 ErrOff 0.0 end
+   CNVSOSCF true
+   SOSCFStart 0.0001
+   SOSCFMaxIt 400
+end
+%geom
+   UseSOSCF true
+   ReducePrint true
+   OptGuess = MORead
+end
+
+* xyzfile +2 1 input.xyz

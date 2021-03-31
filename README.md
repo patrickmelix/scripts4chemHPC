@@ -15,4 +15,5 @@ Happy for any contributions.
 
 ## ORCA
 
-* Coming soon.
+* Multinode ORCA runscript with automatic GO restart/continuation.
+* Example input file with variables to be set by runscript.
