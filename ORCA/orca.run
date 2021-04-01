@@ -18,7 +18,7 @@
 # You need:
 # - Input file, e.g. orca.inp
 # - This script
-# -
+# - The orca binary in your $PATH
 #
 # DO NOT CHANGE:
 # - SLURM output and error log file names
@@ -44,6 +44,7 @@ RUNSCRIPT="orca.run" # $(basename $0) does not work, it is overwritten by SLURM 
 INTERRUPTFILE="stop" # create this file in the main submission directory to prevent resubmission
 MAXRUNS=10 # Maximum number of runs
 module load orca # Module to load
+ORCABIN=$(which orca) # we need the full path!
 ########################################################################
 
 ##################
@@ -55,6 +56,11 @@ echo "Job SLURM ID: $SLURM_JOB_ID"
 
 echo "Name of runscript: $RUNSCRIPT"
 
+echo "ORCA binary including path: $ORCABIN"
+if [ ! -e "$ORCABIN" ]; then
+   echo "ORCABIN seems not to point to a valid file, exiting"
+   exit 1
+fi
 #make tmpdir
 tdir=$(mktemp -u -d $TMPLOCATION/orca_$SLURM_JOB_ID-XXXX)
 export tdir=$tdir
@@ -205,7 +211,7 @@ listOnNodes
 #Run ORCA
 echo "Running ORCA now!"
 cd $tdir #forum says this avoids problems: https://orcaforum.kofo.mpg.de/viewtopic.php?f=9&t=4984&p=20991&hilit=working+without+local+directories#p20991
-$ORCADIR/orca $SLURM_JOB_NAME.inp >> $SLURM_SUBMIT_DIR/$SLURM_JOB_NAME.out &
+$ORCABIN $SLURM_JOB_NAME.inp >> $SLURM_SUBMIT_DIR/$SLURM_JOB_NAME.out &
 
 #wait for trap to hit or job to finish
 wait
