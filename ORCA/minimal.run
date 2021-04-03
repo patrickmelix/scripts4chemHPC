@@ -1,0 +1,153 @@
+#!/bin/bash
+#SBATCH --job-name="JOBNAME"
+#SBATCH -N 2
+#SBATCH --ntasks-per-node=24
+#SBATCH -t 04:00:00
+#SBATCH -p short
+#SBATCH --signal=B:12@3000 #send signal 12 to batch script only (B) 5min before kill
+#SBATCH --mail-user=yourmail@domain.com
+#SBATCH --mail-type=END,NONE,FAIL,REQUEUE # Events options are job BEGIN, END, NONE, FAIL, REQUEUE
+
+########################################################################
+# README
+#
+# Warning:
+# Use this script with caution. Not understanding what and how it does may lead to data loss!
+# See also the example input file.
+#
+# You need:
+# - Input file, e.g. orca.inp -> $ORCAINPUT see below
+# - This script
+# - The orca binary in your $PATH
+#
+# Supports:
+# - Variable expansion in input file (set maxcore to $ORCAMEM and nprocs to $ORCANPROCS)
+#
+#
+##################
+
+##################
+# Defaults
+# change with care to suit your setup
+##################
+TMPLOCATION=/tmp # should be a fast filesystem, tmpdir is created in here
+ORCAMEMMULT=0.7 # multiply physical memory with this factor for the value given to ORCA through $ORCAMEM
+ORCAINPUT="orca.inp"
+module load orca # Module to load
+ORCABIN=$(which orca) # we need the full path!
+########################################################################
+
+##################
+# Script
+##################
+set -e
+echo "Starting at $(date) in $(pwd)"
+echo "Job SLURM ID: $SLURM_JOB_ID"
+
+echo "ORCA binary including path: $ORCABIN"
+if [ ! -e "$ORCABIN" ]; then
+   echo "ORCABIN seems not to point to a valid file, exiting"
+   exit 1
+fi
+#make tmpdir
+tdir=$(mktemp -u -d $TMPLOCATION/orca_$SLURM_JOB_ID-XXXX)
+export tdir=$tdir
+export TMPDIR=$tdir
+#create on all nodes
+echo "Creating TMPDIR on all nodes"
+srun -n ${SLURM_JOB_NUM_NODES} --ntasks-per-node=1 mkdir -p $tdir; echo Done on $(hostname -s)
+
+# Creating nodefile in tmpdir on main node
+scontrol show hostname ${SLURM_JOB_NODELIST} > $tdir/$SLURM_JOB_NAME.nodes #only list of nodes, each node once
+hosts=$(scontrol show hostname ${SLURM_JOB_NODELIST})
+echo "Content of nodes-file" #debug
+cat $tdir/$SLURM_JOB_NAME.nodes
+#sbcast $tdir/$SLURM_JOB_NAME.nodes $tdir/$SLURM_JOB_NAME.nodes #not needed
+echo "Running on nodes: $SLURM_NODELIST"
+
+export ORCANPROCS=$SLURM_NTASKS
+export ORCAMEM=$( echo "$SLURM_MEM_PER_CPU*$ORCAMEMMULT" | bc)
+export ORCAMEM=${ORCAMEM%%.*}
+echo "Using $ORCANPROCS of tasks in the ORCA input."
+echo "Using $ORCAMEM of memory in the ORCA input."
+
+#Helper Functions
+function listOnNodes()
+{
+   echo "Listing contents of $tdir on all hosts..."
+   for host in $hosts; do
+     echo "- Content of $tdir on host $host:"
+     ssh $host ls -la $tdir
+   done
+   echo "... Done!"
+}
+function removeOnNodes()
+{
+   echo "Removing $tdir on all nodes..."
+   for host in $hosts; do
+     echo "- Removing $tdir on host $host"
+     ssh $host rm -r $tdir
+   done
+   echo "... Done!"
+}
+function rsyncResultsBack()
+{
+   echo -n "Rsyncing files from $tdir to $SLURM_SUBMIT_DIR..."
+   rsync -ptgoDLm --exclude="*.tmp" --include="$SLURM_JOB_NAME*" --exclude="*" $tdir/* $SLURM_SUBMIT_DIR/ # -a without rl and follow symlinks, m no empty dirs
+   echo "... Done!"
+}
+
+#move back files when recieving signal to retrieve output on killed or crashed jobs
+function cleanup_crash()
+{
+   echo "Moving $tdir from all hosts to $SLURM_SUBMIT_DIR for analysis..."
+   for host in $hosts; do
+     echo "- Moving contents of $tdir on host $host"
+     ssh $host mv $tdir $SLURM_SUBMIT_DIR/crash_files_$host
+   done
+   echo "... Done!"
+}
+#trap the signal, terminate all children but not the script itself
+trap 'trap " " SIGTERM; kill 0; wait; cleanup_crash; exit 0' 12 15 18 #15 and 18 are getting sent before killing by slurm on quest
+
+#substitute variables in inputfile
+echo "Writing input file to $SLURM_JOB_NAME.inp"
+cat $ORCAINPUT | envsubst > $SLURM_JOB_NAME.inp
+
+echo "Contents of submit directory before run"
+ls -la $SLURM_SUBMIT_DIR
+
+rsync -ptgoDL --exclude "slurm-*.out" $SLURM_SUBMIT_DIR/* $tdir/ #-a without rl and follow symlinks
+
+#listing contents of tdir on each node
+listOnNodes
+
+#Run ORCA
+echo "Running ORCA now!"
+cd $tdir #forum says this avoids problems: https://orcaforum.kofo.mpg.de/viewtopic.php?f=9&t=4984&p=20991&hilit=working+without+local+directories#p20991
+$ORCABIN $SLURM_JOB_NAME.inp >> $SLURM_SUBMIT_DIR/$SLURM_JOB_NAME.out &
+
+#wait for trap to hit or job to finish
+wait
+
+#check exit status
+echo "Checking exit status..."
+EXITSTATUS=$?
+echo "ORCA terminated with status $EXITSTATUS"
+#if ORCA failed internally
+if grep -q "aborting the run" $SLURM_SUBMIT_DIR/$SLURM_JOB_NAME.out; then
+   EXITSTATUS=6
+   echo "Found aborted in the output."
+fi
+
+
+if [ "$EXITSTATUS" -ge 1 ]; then
+   echo "Error detected, moving relevant files back."
+   cleanup_crash
+else
+   echo "Copying files back after normal exit"
+   listOnNodes
+   rsyncResultsBack
+   removeOnNodes
+fi
+echo "Finishing this at $(date) in $(pwd)"
