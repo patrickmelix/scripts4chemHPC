@@ -150,8 +150,8 @@ function restart()
    #not sure why joint f l does not work, so have to run second time for symlinks
    ignore=("$RUNSCRIPT" "$INTERRUPTFILE" "full_traj.xyz")
    echo -n "Ignoring these files: ${ignore[*]}, moving all others..."
-   find . -maxdepth 1 -type f -not -name "${ignore[0]}" $(printf -- '-not -name "%s" ' "${ignore[@]:1}") -exec mv -t ./${n}/ {} + || { echo 'moving files failed' ; exit 1; }
-   find . -maxdepth 1 -type l -not -name "${ignore[0]}" $(printf -- '-not -name "%s" ' "${ignore[@]:1}") -exec mv -t ./${n}/ {} + || { echo 'moving symlinks failed' ; exit 1; }
+   find . -maxdepth 1 -type f -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}/ {} + || { echo 'moving files failed' ; exit 1; }
+   find . -maxdepth 1 -type l -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}/ {} + || { echo 'moving symlinks failed' ; exit 1; }
    echo "... Done!"
 
    #save space by creating symlinks
