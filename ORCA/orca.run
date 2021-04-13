@@ -111,7 +111,7 @@ function removeOnNodes()
 function rsyncResultsBack()
 {
    echo -n "Rsyncing files from $tdir to $SLURM_SUBMIT_DIR..."
-   rsync -ptgoDLm --exclude="*.tmp" --include="$SLURM_JOB_NAME*" --exclude="*" $tdir/* $SLURM_SUBMIT_DIR/ # -a without rl and follow symlinks, m no empty dirs
+   rsync -ptgoDLm --exclude="*.tmp*" --include="$SLURM_JOB_NAME*" --exclude="*" $tdir/* $SLURM_SUBMIT_DIR/ # -a without rl and follow symlinks, m no empty dirs
    echo "... Done!"
 }
 
