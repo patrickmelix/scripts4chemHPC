@@ -45,6 +45,7 @@ INTERRUPTFILE="stop" # create this file in the main submission directory to prev
 MAXRUNS=10 # Maximum number of runs
 module load orca # Module to load
 ORCABIN=$(which orca) # we need the full path!
+ignore=("$RUNSCRIPT" "$INTERRUPTFILE" "full_traj.xyz" "traj.xyz" "$ORCAINPUT") #files that stay where they are during restart
 ########################################################################
 
 ##################
@@ -148,7 +149,6 @@ function restart()
    mkdir ${n} || { echo 'mkdir failed' ; exit 1; }
    #move all files to subfolder n, except these:
    #not sure why joint f l does not work, so have to run second time for symlinks
-   ignore=("$RUNSCRIPT" "$INTERRUPTFILE" "full_traj.xyz")
    echo -n "Ignoring these files: ${ignore[*]}, moving all others..."
    find . -maxdepth 1 -type f -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}/ {} + || { echo 'moving files failed' ; exit 1; }
    find . -maxdepth 1 -type l -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}/ {} + || { echo 'moving symlinks failed' ; exit 1; }
@@ -159,7 +159,7 @@ function restart()
    ln -s ./${n}/$SLURM_JOB_NAME.xyz $STRUCTURE
    ln -s ./${n}/$SLURM_JOB_NAME.gbw restart.gbw
    ln -s ./${n}/$SLURM_JOB_NAME.opt restart.opt
-   ln -s ./${n}/$SLURM_JOB_NAME.inp $ORCAINPUT
+   #ln -s ./${n}/$SLURM_JOB_NAME.inp $ORCAINPUT
    echo "... Done!"
 
    echo "Checking input file for restart settings."
