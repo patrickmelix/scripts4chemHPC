@@ -28,6 +28,7 @@
 # Supports:
 # - Variable expansion in input file (set maxcore to $ORCAMEM and nprocs to $ORCANPROCS)
 # - Automatic restart of GO optimizations until convergence
+# - Numerical Frequencies Restart (some manual changes needed)
 #
 #
 ##################
@@ -79,6 +80,18 @@ cat $tdir/$SLURM_JOB_NAME.nodes
 echo "Running on nodes: $SLURM_NODELIST"
 
 export ORCANPROCS=$SLURM_NTASKS
+if [[ -z $SLURM_MEM_PER_CPU ]]; then
+   if [[ -z $SLURM_MEM_PER_NODE ]]; then
+      echo "Neither SLURM_MEM_PER_CPU nor SLURM_MEM_PER_NODE set!"
+      exit 1
+   fi
+   if [[ -z $SLURM_NTASKS_PER_NODE ]]; then
+      echo "Neither SLURM_MEM_PER_CPU nor SLURM_NTASKS_PER_NODE set!"
+      exit 1
+   fi
+   SLURM_MEM_PER_CPU=$( echo "$SLURM_MEM_PER_NODE/$SLURM_NTASKS_PER_NODE" | bc)
+   echo "SLURM_MEM_PER_CPU not set, setting it to $SLURM_MEM_PER_CPU based on SLURM_MEM_PER_NODE and SLURM_NTASKS_PER_NODE"
+fi
 export ORCAMEM=$( echo "$SLURM_MEM_PER_CPU*$ORCAMEMMULT" | bc)
 export ORCAMEM=${ORCAMEM%%.*}
 echo "Using $ORCANPROCS of tasks in the ORCA input."
@@ -125,6 +138,17 @@ function cleanup_crash()
      ssh $host mv $tdir $SLURM_SUBMIT_DIR/crash_files_$host
    done
    echo "... Done!"
+}
+#use this for numerical frequencies to only gather hessian files
+function cleanup_numfreq()
+{
+   echo "Cleaning up NumFreq Job"
+   echo "Rsyncing .hess files from all nodes..."
+   for host in $hosts; do
+     echo "- On host $host"
+     rsync -ptgoDLmP --include="*.hess" --exclude="*" $tdir/* $SLURM_SUBMIT_DIR/ #-a without rl and follow symlinks, m no empty dirs
+   done
+   removeOnNodes
 }
 function restart()
 {
