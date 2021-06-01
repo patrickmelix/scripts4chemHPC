@@ -1,0 +1,159 @@
+#!/bin/bash
+#SBATCH --job-name="GO"
+#SBATCH -N 4
+#SBATCH --ntasks-per-node=24
+#SBATCH --mem-per-cpu=4400MB
+#SBATCH -t 04:00:00
+#SBATCH -p short
+#SBATCH --signal=B:12@6000 #send signal 12 to batch script only (B) 10min before kill
+########################################################################
+# README
+#
+# Warning:
+# Use this script with caution. Not understanding what and how it does may lead to data loss!
+# Only tested for GO so far.
+#
+# You need:
+# - Input files
+# - This script
+# - The VASP binary in your path (or loading it into there using a module below)
+# - Settings in INCAR to write either WAVECAR or CHGCAR for restarts
+#
+# DO NOT CHANGE:
+# -
+#
+# Supports (tested):
+# - Automatic restart of GO optimizations until convergence
+#
+#
+##################
+
+##################
+# Defaults
+# change with care to suit your setup
+##################
+module purge all
+module load vasp/5.4.4-vtst-openmpi-4.0.5-intel-19.0.5.281
+export SLURM_MPI_TYPE=pmix_v3
+VASPBIN="vasp_std" # change vasp_std to vasp_gam for gamma only
+MAXRUNS=50 # Maximum number of runs
+RUNSCRIPT="vasp-chainjob.run" # name of this file, $(basename $0) does not work, it is overwritten by SLURM sometimes...
+ignore=("KPOINTS" "POTCAR" "$RUNSCRIPT" "INCAR") # files that stay where they are during restart
+########################################################################
+
+##################
+# Script
+##################
+
+function set_wavecar()
+{
+   echo -n "Copying WAVECAR+INCAR and setting options..."
+   cp ./${1}/WAVECAR .
+   cp INCAR ./${1}/
+   echo "... Done!"
+
+   echo "Checking input file for restart settings."
+   #ISTART
+   if grep -i "[[:space:]]*ISTART[[:space:]]*=[[:space:]]*1" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ISTART[[:space:]]*=[[:space:]]*1"
+   then
+      echo "- ISTART=1 already set"
+   else
+      echo "- Setting ISTART=1"
+      echo "ISTART=1" >> INCAR
+   fi
+   #ICHARG
+   if grep -i "[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*0" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*0"
+   then
+      echo "- ICHARG=0 already set"
+   else
+      echo "- Setting ICHARG=0"
+      echo "ICHARG=0" >> INCAR
+   fi
+   echo "... Done!"
+
+}
+function set_chgcar()
+{
+   echo -n "Copying CHGCAR+INCAR and setting options..."
+   cp ./${1}/CHGCAR .
+   cp INCAR ./${1}/
+   echo "... Done!"
+
+   echo "Checking input file for CHGCAR restart settings."
+   if grep -i "[[:space:]]*ISTART[[:space:]]*=[[:space:]]*0" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ISTART[[:space:]]*=[[:space:]]*0"
+   then
+      echo "- ISTART=0 already set"
+   else
+      echo "- Setting ISTART=0"
+      echo "ISTART=0" >> INCAR
+   fi
+   #ICHARG
+   if grep -i "[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1"
+   then
+      echo "- ICHARG=1 already set"
+   else
+      echo "- Setting ICHARG=1"
+      echo "ICHARG=1" >> INCAR
+   fi
+   echo "... Done!"
+
+}
+
+function restart()
+{
+   echo "Preparing restart..."
+   #find highest numeric subfolder
+   n="$(find . -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
+   n=$((n+1))
+   if [ "$n" -ge "$MAXRUNS" ]; then
+      echo "Maximum number of runs reached, exiting!"
+      exit 1
+   fi
+   echo -n "Moving files to subdir ${n}, "
+   mkdir ${n} || { echo 'mkdir failed' ; exit 1; }
+   #move all files to subfolder n, except these:
+   #not sure why joint f l does not work, so have to run second time for symlinks
+   echo -n "Ignoring these files: ${ignore[*]}, moving all others..."
+   find . -maxdepth 1 -type f -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}/ {} + || { echo 'moving files failed' ; exit 1; }
+   find . -maxdepth 1 -type l -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}/ {} + || { echo 'moving symlinks failed' ; exit 1; }
+   echo "... Done!"
+
+   #save space by creating symlinks
+   echo -n "Create symlinks..."
+   ln -s ./${n}/CONTCAR POSCAR
+   echo "... Done!"
+
+   if [[ -s ./${n}/WAVECAR ]]; then #WAVECAR restart
+      set_wavecar $n
+   elif [[ -s ./${n}/CHGCAR ]]; then #CHGCAR restart
+      set_chgcar $n
+   else
+      echo "Neither WAVECAR or CHGCAR exist to restart from, exciting"
+      exit 1
+   fi
+
+   #check for interruptfile
+   if [ -e "$INTERRUPTFILE" ];
+   then
+      echo "Interruptfile found, exiting."
+      exit 1
+   else
+      echo "Resubmitting now"
+      sbatch "${RUNSCRIPT}"
+   fi
+}
+
+function terminate()
+{
+   echo "Caught SLURM signal, writing STOPCAR"
+   echo "LABORT = .True." > STOPCAR
+}
+
+#trap the signal, terminate all children but not the script itself
+trap 'terminate; wait; restart; exit 0' 12 15 18 #15 and 18 are getting sent before killing by slurm on quest
+mpirun -n $SLURM_NTASKS $VASPBIN &
+#wait for trap to hit or job to finish
+wait
+
+echo "VASP terminated normally, exiting."
+exit 0
