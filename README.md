@@ -17,3 +17,7 @@ Happy for any contributions.
 
 * Multinode ORCA runscript with automatic GO restart/continuation.
 * Example input file with variables to be set by runscript.
+
+## VASP
+
+* VASP runscript with automatic GO restart/continuation.
