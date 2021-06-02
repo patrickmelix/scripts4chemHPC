@@ -21,3 +21,4 @@ Happy for any contributions.
 ## VASP
 
 * VASP runscript with automatic GO restart/continuation.
+* Script to combine all `vasprun.xml` recursively into one ASE-xyz trajectory.
