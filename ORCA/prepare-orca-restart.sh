@@ -45,27 +45,35 @@ echo "... Done!"
 
 #save space by creating symlinks
 echo -n "Create symlinks..."
-ln -s ./${n}/$NAME.xyz $STRUCTURE
+[ -e ./${n}/$NAME.xyz ] && ln -s ./${n}/$NAME.xyz $STRUCTURE
 ln -s ./${n}/$NAME.gbw restart.gbw
-ln -s ./${n}/$NAME.opt restart.opt
-#ln -s ./${n}/$NAME.inp $ORCAINPUT
+[ -e ./${n}/$NAME.opt ] && ln -s ./${n}/$NAME.opt restart.opt
+#ln -s ./${n}/$NAME.inp "$ORCAINPUT"
 echo "... Done!"
 
 echo "Checking input file for restart settings."
-#set hessian input
-if grep -i "[[:space:]]*InHess[[:space:]]*Read" $ORCAINPUT | grep -qv "[[:space:]]*#[[:space:]]*InHess[[:space:]]*Read"
+#set hessian input if GO
+if grep -i "opt" "$ORCAINPUT"
 then
-   echo "- Hessian Restart already set"
-else
-   echo "- Setting Hessian Restart Key"
-   sed -i "/.*geom.*/a\ InHess Read\n InHessName \"restart.opt\"" $ORCAINPUT
+   if grep -i "[[:space:]]*InHess[[:space:]]*Read" "$ORCAINPUT" | grep -qv "[[:space:]]*#[[:space:]]*InHess[[:space:]]*Read"
+   then
+      echo "- Hessian Restart already set"
+   else
+      echo "- Setting Hessian Restart Key"
+      sed -i "/.*geom.*/a\ InHess Read\n InHessName \"restart.opt\"" "$ORCAINPUT"
+   fi
 fi
 #set scf guess input
-if grep -i "[[:space:]]*MOInp[[:space:]]*\"restart.gbw\"" $ORCAINPUT | grep -qv "[[:space:]]*#[[:space:]]*MOInp[[:space:]]*\"restart.gbw\""
+if grep -i "[[:space:]]*MOInp[[:space:]]*\"restart.gbw\"" "$ORCAINPUT" | grep -qv "[[:space:]]*#[[:space:]]*MOInp[[:space:]]*\"restart.gbw\""
 then
    echo "- SCF Restart already set"
 else
    echo "- Setting SCF Restart Key"
-   sed -i "/.*scf.*/a\ Guess MORead\n MOInp \"restart.gbw\"" $ORCAINPUT
+   if grep -i "[[:space:]]*Guess[[:space:]]*" "$ORCAINPUT"
+   then
+      echo "- Removing old Guess Key"
+      sed -i "/guess /Id" "$ORCAINPUT"
+   fi
+   sed -i "/.*scf.*/a\ Guess MORead\n MOInp \"restart.gbw\"" "$ORCAINPUT"
 fi
 echo "... Done! Resubmit manually now"
