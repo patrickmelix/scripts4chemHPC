@@ -53,7 +53,7 @@ echo "... Done!"
 
 echo "Checking input file for restart settings."
 #set hessian input if GO
-if grep -i "opt" "$ORCAINPUT"
+if grep -iq "opt" "$ORCAINPUT"
 then
    if grep -i "[[:space:]]*InHess[[:space:]]*Read" "$ORCAINPUT" | grep -qv "[[:space:]]*#[[:space:]]*InHess[[:space:]]*Read"
    then
@@ -69,7 +69,7 @@ then
    echo "- SCF Restart already set"
 else
    echo "- Setting SCF Restart Key"
-   if grep -i "[[:space:]]*Guess[[:space:]]*" "$ORCAINPUT"
+   if grep -iq "[[:space:]]*Guess[[:space:]]*" "$ORCAINPUT"
    then
       echo "- Removing old Guess Key"
       sed -i "/guess /Id" "$ORCAINPUT"
