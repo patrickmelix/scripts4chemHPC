@@ -58,16 +58,30 @@ function set_wavecar()
    then
       echo "- ISTART=1 already set"
    else
-      echo "- Setting ISTART=1"
-      echo "ISTART=1" >> INCAR
+      echo -n "- Setting ISTART=1"
+      if grep -iq "istart"
+      then
+         echo " by chaning value"
+         sed -ie "s/[[:space:]]*ISTART[[:space:]]*=[[:space:]]*[0-9]/ISTART=1/I" INCAR
+      else
+         echo " by appending to INCAR"
+         echo "ISTART=1" >> INCAR
+      fi
    fi
    #ICHARG
    if grep -i "[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*0" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*0"
    then
       echo "- ICHARG=0 already set"
    else
-      echo "- Setting ICHARG=0"
-      echo "ICHARG=0" >> INCAR
+      echo -n "- Setting ICHARG=0"
+      if grep -iq "icharg"
+      then
+         echo " by chaning value"
+         sed -ie "s/[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*[0-9]/ICHARG=0/I" INCAR
+      else
+         echo " by appending to INCAR"
+         echo "ICHARG=0" >> INCAR
+      fi
    fi
    echo "... Done!"
 
@@ -84,16 +98,30 @@ function set_chgcar()
    then
       echo "- ISTART=0 already set"
    else
-      echo "- Setting ISTART=0"
-      echo "ISTART=0" >> INCAR
+      echo -n "- Setting ISTART=1"
+      if grep -iq "istart"
+      then
+         echo " by chaning value"
+         sed -ie "s/[[:space:]]*ISTART[[:space:]]*=[[:space:]]*[0-9]/ISTART=0/I" INCAR
+      else
+         echo " by appending to INCAR"
+         echo "ISTART=0" >> INCAR
+      fi
    fi
    #ICHARG
    if grep -i "[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1"
    then
       echo "- ICHARG=1 already set"
    else
-      echo "- Setting ICHARG=1"
-      echo "ICHARG=1" >> INCAR
+      echo -n "- Setting ICHARG=0"
+      if grep -iq "icharg"
+      then
+         echo " by chaning value"
+         sed -ie "s/[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*[0-9]/ICHARG=1/I" INCAR
+      else
+         echo " by appending to INCAR"
+         echo "ICHARG=1" >> INCAR
+      fi
    fi
    echo "... Done!"
 
@@ -101,6 +129,14 @@ function set_chgcar()
 
 function restart()
 {
+   echo -n "Checking if Job finished while waiting..."
+   if grep -iq "aborting loop because hard stop was set" OUTCAR
+   then
+      echo " not the case, continuing with restart"
+   else
+      echo " seems like it. Or there might be another problem. Not restarting."
+      exit 0
+   fi
    echo "Preparing restart..."
    #find highest numeric subfolder
    n="$(find . -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
@@ -150,7 +186,7 @@ function terminate()
 }
 
 #trap the signal, terminate all children but not the script itself
-trap 'terminate; wait; restart; exit 0' 12 15 18 #15 and 18 are getting sent before killing by slurm on quest
+trap 'terminate; wait; restart; exit 0' 12 #15 and 18 are getting sent before killing by slurm on quest
 mpirun -n $SLURM_NTASKS $VASPBIN &
 #wait for trap to hit or job to finish
 wait

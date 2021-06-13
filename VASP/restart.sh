@@ -45,16 +45,30 @@ function set_wavecar()
    then
       echo "- ISTART=1 already set"
    else
-      echo "- Setting ISTART=1"
-      echo "ISTART=1" >> INCAR
+      echo -n "- Setting ISTART=1"
+      if grep -iq "istart"
+      then
+         echo " by chaning value"
+         sed -ie "s/[[:space:]]*ISTART[[:space:]]*=[[:space:]]*[0-9]/ISTART=1/I" INCAR
+      else
+         echo " by appending to INCAR"
+         echo "ISTART=1" >> INCAR
+      fi
    fi
    #ICHARG
    if grep -i "[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*0" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*0"
    then
       echo "- ICHARG=0 already set"
    else
-      echo "- Setting ICHARG=0"
-      echo "ICHARG=0" >> INCAR
+      echo -n "- Setting ICHARG=0"
+      if grep -iq "icharg"
+      then
+         echo " by chaning value"
+         sed -ie "s/[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*[0-9]/ICHARG=0/I" INCAR
+      else
+         echo " by appending to INCAR"
+         echo "ICHARG=0" >> INCAR
+      fi
    fi
    echo "... Done!"
 
@@ -71,16 +85,30 @@ function set_chgcar()
    then
       echo "- ISTART=0 already set"
    else
-      echo "- Setting ISTART=0"
-      echo "ISTART=0" >> INCAR
+      echo -n "- Setting ISTART=1"
+      if grep -iq "istart"
+      then
+         echo " by chaning value"
+         sed -ie "s/[[:space:]]*ISTART[[:space:]]*=[[:space:]]*[0-9]/ISTART=0/I" INCAR
+      else
+         echo " by appending to INCAR"
+         echo "ISTART=0" >> INCAR
+      fi
    fi
    #ICHARG
    if grep -i "[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1"
    then
       echo "- ICHARG=1 already set"
    else
-      echo "- Setting ICHARG=1"
-      echo "ICHARG=1" >> INCAR
+      echo -n "- Setting ICHARG=0"
+      if grep -iq "icharg"
+      then
+         echo " by chaning value"
+         sed -ie "s/[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*[0-9]/ICHARG=1/I" INCAR
+      else
+         echo " by appending to INCAR"
+         echo "ICHARG=1" >> INCAR
+      fi
    fi
    echo "... Done!"
 
