@@ -35,6 +35,8 @@
 module purge all
 module load vasp/5.4.4-vtst-openmpi-4.0.5-intel-19.0.5.281
 export SLURM_MPI_TYPE=pmix_v3
+INTERRUPTFILE="EXIT"
+MPIBIN="mpirun -n $SLURM_NTASKS"
 VASPBIN="vasp_std" # change vasp_std to vasp_gam for gamma only
 MAXRUNS=50 # Maximum number of runs
 RUNSCRIPT="vasp-chainjob.run" # name of this file, $(basename $0) does not work, it is overwritten by SLURM sometimes...
@@ -44,91 +46,66 @@ ignore=("KPOINTS" "POTCAR" "$RUNSCRIPT" "INCAR") # files that stay where they ar
 ##################
 # Script
 ##################
+set -e
 
+function set_incar_option()
+{
+   #$1: keyword, $2 value
+   echo "Processing INCAR for key $1"
+   if grep -i "[[:space:]]*$1[[:space:]]*=[[:space:]]*$2" INCAR | grep -qv "[[:space:]]*#[[:space:]]*$1[[:space:]]*=[[:space:]]*"
+   then
+      echo "- $1=$2 already set"
+   else
+      echo -n "- Setting $1=$2"
+      if grep -iq "$1" INCAR
+      then
+         echo " by changing value"
+         sed -ie "s/[[:space:]]*$1[[:space:]]*=[[:space:]]*[0-9]/$1=$2/I" INCAR
+      else
+         echo " by appending to INCAR"
+         echo "$1=$2" >> INCAR
+      fi
+   fi
+}
+
+function set_wavecar_chgcar()
+{
+   echo "Copying WAVECAR+CHGCAR+INCAR and setting options..."
+   cp ./${1}/WAVECAR .
+   cp ./${1}/CHGCAR .
+   cp INCAR ./${1}/
+   set_incar_option ISTART 1
+   set_incar_option ICHARG 1
+   echo "... Done!"
+}
 function set_wavecar()
 {
-   echo -n "Copying WAVECAR+INCAR and setting options..."
+   echo "Copying WAVECAR+INCAR and setting options..."
    cp ./${1}/WAVECAR .
    cp INCAR ./${1}/
+   set_incar_option ISTART 1
+   set_incar_option ICHARG 0
    echo "... Done!"
-
-   echo "Checking input file for restart settings."
-   #ISTART
-   if grep -i "[[:space:]]*ISTART[[:space:]]*=[[:space:]]*1" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ISTART[[:space:]]*=[[:space:]]*1"
-   then
-      echo "- ISTART=1 already set"
-   else
-      echo -n "- Setting ISTART=1"
-      if grep -iq "istart"
-      then
-         echo " by chaning value"
-         sed -ie "s/[[:space:]]*ISTART[[:space:]]*=[[:space:]]*[0-9]/ISTART=1/I" INCAR
-      else
-         echo " by appending to INCAR"
-         echo "ISTART=1" >> INCAR
-      fi
-   fi
-   #ICHARG
-   if grep -i "[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*0" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*0"
-   then
-      echo "- ICHARG=0 already set"
-   else
-      echo -n "- Setting ICHARG=0"
-      if grep -iq "icharg"
-      then
-         echo " by chaning value"
-         sed -ie "s/[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*[0-9]/ICHARG=0/I" INCAR
-      else
-         echo " by appending to INCAR"
-         echo "ICHARG=0" >> INCAR
-      fi
-   fi
-   echo "... Done!"
-
 }
 function set_chgcar()
 {
-   echo -n "Copying CHGCAR+INCAR and setting options..."
+   echo "Copying CHGCAR+INCAR and setting options..."
    cp ./${1}/CHGCAR .
    cp INCAR ./${1}/
+   set_incar_option ISTART 0
+   set_incar_option ICHARG 1
    echo "... Done!"
-
-   echo "Checking input file for CHGCAR restart settings."
-   if grep -i "[[:space:]]*ISTART[[:space:]]*=[[:space:]]*0" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ISTART[[:space:]]*=[[:space:]]*0"
-   then
-      echo "- ISTART=0 already set"
-   else
-      echo -n "- Setting ISTART=1"
-      if grep -iq "istart"
-      then
-         echo " by chaning value"
-         sed -ie "s/[[:space:]]*ISTART[[:space:]]*=[[:space:]]*[0-9]/ISTART=0/I" INCAR
-      else
-         echo " by appending to INCAR"
-         echo "ISTART=0" >> INCAR
-      fi
-   fi
-   #ICHARG
-   if grep -i "[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1"
-   then
-      echo "- ICHARG=1 already set"
-   else
-      echo -n "- Setting ICHARG=0"
-      if grep -iq "icharg"
-      then
-         echo " by chaning value"
-         sed -ie "s/[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*[0-9]/ICHARG=1/I" INCAR
-      else
-         echo " by appending to INCAR"
-         echo "ICHARG=1" >> INCAR
-      fi
-   fi
-   echo "... Done!"
-
 }
 
 function restart()
 {
+   #check for interruptfile at beginning and end
+   if [ -e "$INTERRUPTFILE" ];
+   then
+      echo "Interruptfile found, exiting."
+      exit 1
+   fi
+
    echo -n "Checking if Job finished while waiting..."
    if grep -iq "aborting loop because hard stop was set" OUTCAR
    then
@@ -159,7 +136,9 @@ function restart()
    ln -s ./${n}/CONTCAR POSCAR
    echo "... Done!"
 
-   if [[ -s ./${n}/WAVECAR ]]; then #WAVECAR restart
+   if [[ -s ./${n}/WAVECAR ]] && [[ -s ./${n}/CHGCAR ]]; then #WAVECAR and CHGCAR restart
+      set_wavecar_chgcar $n
+   elif [[ -s ./${n}/WAVECAR ]]; then #WAVECAR restart
       set_wavecar $n
    elif [[ -s ./${n}/CHGCAR ]]; then #CHGCAR restart
       set_chgcar $n
@@ -187,7 +166,7 @@ function terminate()
 
 #trap the signal, terminate all children but not the script itself
 trap 'terminate; wait; restart; exit 0' 12 #15 and 18 are getting sent before killing by slurm on quest
-mpirun -n $SLURM_NTASKS $VASPBIN &
+$MPIBIN $VASPBIN &
 #wait for trap to hit or job to finish
 wait
 
