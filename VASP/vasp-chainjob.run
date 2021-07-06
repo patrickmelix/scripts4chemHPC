@@ -105,6 +105,11 @@ function restart()
       echo "Interruptfile found, exiting."
       exit 1
    fi
+   if [ -e "STOPCAR" ];
+   then
+      echo "STOPCAR found, this should have been deleted by VASP. Aborting restart."
+      exit 1
+   fi
 
    echo -n "Checking if Job finished while waiting..."
    if grep -iq "aborting loop because hard stop was set" OUTCAR
