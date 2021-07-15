@@ -25,93 +25,62 @@
 # change with care to suit your setup
 ##################
 RUNSCRIPT="vasp-chainjob.run" # name of the runscript 
+ISTART_RESTART=1 #https://www.vasp.at/wiki/index.php/ISTART, if you want continous GO with varying volume you might want to change to 2
 ignore=("KPOINTS" "POTCAR" "$RUNSCRIPT" "INCAR") # files that stay where they are during restart
 ########################################################################
 
 ##################
 # Script
 ##################
+set -e
 
+function set_incar_option()
+{
+   #$1: keyword, $2 value
+   echo "Processing INCAR for key $1"
+   if grep -i "[[:space:]]*$1[[:space:]]*=[[:space:]]*$2" INCAR | grep -qv "[[:space:]]*#[[:space:]]*$1[[:space:]]*=[[:space:]]*"
+   then
+      echo "- $1=$2 already set"
+   else
+      echo -n "- Setting $1=$2"
+      if grep -iq "$1" INCAR
+      then
+         echo " by changing value"
+         sed -ie "s/[[:space:]]*$1[[:space:]]*=[[:space:]]*[0-9]/$1=$2/I" INCAR
+      else
+         echo " by appending to INCAR"
+         echo "$1=$2" >> INCAR
+      fi
+   fi
+}
+
+function set_wavecar_chgcar()
+{
+   echo "Copying WAVECAR+CHGCAR+INCAR and setting options..."
+   cp ./${1}/WAVECAR .
+   cp ./${1}/CHGCAR .
+   cp INCAR ./${1}/
+   set_incar_option ISTART $ISTART_RESTART
+   set_incar_option ICHARG 1
+   echo "... Done!"
+}
 function set_wavecar()
 {
-   echo -n "Copying WAVECAR+INCAR and setting options..."
+   echo "Copying WAVECAR+INCAR and setting options..."
    cp ./${1}/WAVECAR .
    cp INCAR ./${1}/
+   set_incar_option ISTART $ISTART_RESTART
+   set_incar_option ICHARG 0
    echo "... Done!"
-
-   echo "Checking input file for restart settings."
-   #ISTART
-   if grep -i "[[:space:]]*ISTART[[:space:]]*=[[:space:]]*1" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ISTART[[:space:]]*=[[:space:]]*1"
-   then
-      echo "- ISTART=1 already set"
-   else
-      echo -n "- Setting ISTART=1"
-      if grep -iq "istart"
-      then
-         echo " by chaning value"
-         sed -ie "s/[[:space:]]*ISTART[[:space:]]*=[[:space:]]*[0-9]/ISTART=1/I" INCAR
-      else
-         echo " by appending to INCAR"
-         echo "ISTART=1" >> INCAR
-      fi
-   fi
-   #ICHARG
-   if grep -i "[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*0" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*0"
-   then
-      echo "- ICHARG=0 already set"
-   else
-      echo -n "- Setting ICHARG=0"
-      if grep -iq "icharg"
-      then
-         echo " by chaning value"
-         sed -ie "s/[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*[0-9]/ICHARG=0/I" INCAR
-      else
-         echo " by appending to INCAR"
-         echo "ICHARG=0" >> INCAR
-      fi
-   fi
-   echo "... Done!"
-
 }
 function set_chgcar()
 {
-   echo -n "Copying CHGCAR+INCAR and setting options..."
+   echo "Copying CHGCAR+INCAR and setting options..."
    cp ./${1}/CHGCAR .
    cp INCAR ./${1}/
+   set_incar_option ISTART 0
+   set_incar_option ICHARG 1
    echo "... Done!"
-
-   echo "Checking input file for CHGCAR restart settings."
-   if grep -i "[[:space:]]*ISTART[[:space:]]*=[[:space:]]*0" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ISTART[[:space:]]*=[[:space:]]*0"
-   then
-      echo "- ISTART=0 already set"
-   else
-      echo -n "- Setting ISTART=1"
-      if grep -iq "istart"
-      then
-         echo " by chaning value"
-         sed -ie "s/[[:space:]]*ISTART[[:space:]]*=[[:space:]]*[0-9]/ISTART=0/I" INCAR
-      else
-         echo " by appending to INCAR"
-         echo "ISTART=0" >> INCAR
-      fi
-   fi
-   #ICHARG
-   if grep -i "[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*1"
-   then
-      echo "- ICHARG=1 already set"
-   else
-      echo -n "- Setting ICHARG=0"
-      if grep -iq "icharg"
-      then
-         echo " by chaning value"
-         sed -ie "s/[[:space:]]*ICHARG[[:space:]]*=[[:space:]]*[0-9]/ICHARG=1/I" INCAR
-      else
-         echo " by appending to INCAR"
-         echo "ICHARG=1" >> INCAR
-      fi
-   fi
-   echo "... Done!"
-
 }
 
 function restart()
@@ -134,12 +103,14 @@ function restart()
    ln -s ./${n}/CONTCAR POSCAR
    echo "... Done!"
 
-   if [[ -s ./${n}/WAVECAR ]]; then #WAVECAR restart
+   if [[ -s ./${n}/WAVECAR ]] && [[ -s ./${n}/CHGCAR ]]; then #WAVECAR and CHGCAR restart
+      set_wavecar_chgcar $n
+   elif [[ -s ./${n}/WAVECAR ]]; then #WAVECAR restart
       set_wavecar $n
    elif [[ -s ./${n}/CHGCAR ]]; then #CHGCAR restart
       set_chgcar $n
    else
-      echo "Neither WAVECAR or CHGCAR exist to restart from, exciting"
+      echo "Neither WAVECAR or CHGCAR exist to restart from, exiting"
       exit 1
    fi
 

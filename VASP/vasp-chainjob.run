@@ -32,6 +32,7 @@
 # Defaults
 # change with care to suit your setup
 ##################
+ISTART_RESTART=1 #https://www.vasp.at/wiki/index.php/ISTART, if you want continous GO with varying volume you might want to change to 2
 module purge all
 module load vasp/5.4.4-vtst-openmpi-4.0.5-intel-19.0.5.281
 export SLURM_MPI_TYPE=pmix_v3
@@ -74,7 +75,7 @@ function set_wavecar_chgcar()
    cp ./${1}/WAVECAR .
    cp ./${1}/CHGCAR .
    cp INCAR ./${1}/
-   set_incar_option ISTART 1
+   set_incar_option ISTART $ISTART_RESTART
    set_incar_option ICHARG 1
    echo "... Done!"
 }
@@ -83,7 +84,7 @@ function set_wavecar()
    echo "Copying WAVECAR+INCAR and setting options..."
    cp ./${1}/WAVECAR .
    cp INCAR ./${1}/
-   set_incar_option ISTART 1
+   set_incar_option ISTART $ISTART_RESTART
    set_incar_option ICHARG 0
    echo "... Done!"
 }
@@ -148,7 +149,7 @@ function restart()
    elif [[ -s ./${n}/CHGCAR ]]; then #CHGCAR restart
       set_chgcar $n
    else
-      echo "Neither WAVECAR or CHGCAR exist to restart from, exciting"
+      echo "Neither WAVECAR or CHGCAR exist to restart from, exiting"
       exit 1
    fi
 
