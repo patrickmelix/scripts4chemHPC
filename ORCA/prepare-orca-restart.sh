@@ -69,10 +69,10 @@ then
    echo "- SCF Restart already set"
 else
    echo "- Setting SCF Restart Key"
-   if grep -iq "[[:space:]]*Guess[[:space:]]*" "$ORCAINPUT"
+   if grep -iwq "Guess" "$ORCAINPUT"
    then
       echo "- Removing old Guess Key"
-      sed -i "/guess /Id" "$ORCAINPUT"
+      sed -i "/\bguess\b/Id" "$ORCAINPUT"
    fi
    sed -i "/.*scf.*/a\ Guess MORead\n MOInp \"restart.gbw\"" "$ORCAINPUT"
 fi
