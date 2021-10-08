@@ -46,7 +46,7 @@ function set_incar_option()
       if grep -iq "$1" INCAR
       then
          echo " by changing value"
-         sed -ie "s/[[:space:]]*$1[[:space:]]*=[[:space:]]*[0-9]/$1=$2/I" INCAR
+         sed -i "s/[[:space:]]*$1[[:space:]]*=[[:space:]]*[0-9]/$1=$2/I" INCAR
       else
          echo " by appending to INCAR"
          echo "$1=$2" >> INCAR
