@@ -87,7 +87,7 @@ function restart()
 {
    echo "Preparing restart..."
    #find highest numeric subfolder
-   n="$(find . -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
+   n="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
    n=$((n+1))
    echo -n "Moving files to subdir ${n}, "
    mkdir ${n} || { echo 'mkdir failed' ; exit 1; }

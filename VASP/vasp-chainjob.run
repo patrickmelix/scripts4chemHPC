@@ -122,7 +122,7 @@ function restart()
    fi
    echo "Preparing restart..."
    #find highest numeric subfolder
-   n="$(find . -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
+   n="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
    n=$((n+1))
    if [ "$n" -ge "$MAXRUNS" ]; then
       echo "Maximum number of runs reached, exiting!"
