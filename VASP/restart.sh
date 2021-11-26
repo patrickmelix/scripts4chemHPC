@@ -4,18 +4,17 @@
 #
 # Warning:
 # Use this script with caution. Not understanding what and how it does may lead to data loss!
-# Only tested for GO so far.
 #
 # You need:
 # - Input files
 # - This script
-# - Settings in INCAR to write either WAVECAR or CHGCAR for restarts
 #
 # DO NOT CHANGE:
 # -
 #
 # Supports (tested):
-# - Automatic restart of GO optimizations until convergence
+# - Automatic restart of GO, DIMER and NEB runs until convergence
+# - Settings in INCAR to use WAVECAR and CHGCAR files (automatically detected and INCAR changed accordingly). NOT for NEB yet!
 #
 #
 ##################
@@ -24,7 +23,7 @@
 # Defaults
 # change with care to suit your setup
 ##################
-RUNSCRIPT="vasp-chainjob.run" # name of the runscript 
+RUNSCRIPT="vasp.run" # name of the runscript
 ISTART_RESTART=1 #https://www.vasp.at/wiki/index.php/ISTART, if you want continous GO with varying volume you might want to change to 2
 ignore=("KPOINTS" "POTCAR" "$RUNSCRIPT" "INCAR") # files that stay where they are during restart
 ########################################################################
@@ -83,12 +82,47 @@ function set_chgcar()
    echo "... Done!"
 }
 
-function restart()
+function restart_neb()
 {
    echo "Preparing restart..."
+   #find highest numeric subfolder with -NEB
+   n="$(find . -maxdepth 1 -name "*[0-9]-NEB" -type d | sort -Vr | head -1 | sed 's/.\///' | sed 's/-NEB//')"
+   n=$((n+1))
+   if [ "$n" -ge "$MAXRUNS" ]; then
+      echo "Maximum number of runs reached, exiting!"
+      exit 1
+   fi
+   echo -n "Moving files to subdir ${n}-NEB, "
+   mkdir ${n}-NEB || { echo 'mkdir failed' ; exit 1; }
+   #move files to subfolder n-NEB
+   mv vasprun.xml ./${n}-NEB/
+   mv *.out ./${n}-NEB/
+
+   nImages="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
+   echo -n "processing ${nImages} images: "
+   for (( i=1; i<$nImages; i++  ))
+   do
+      pi=$(printf "%02d" $i)
+      echo -n " ${pi},"
+      mv $pi ${n}-NEB/
+      mkdir $pi
+      cd $pi
+      #save space by creating symlinks
+      ln -s ../${n}-NEB/$pi/CONTCAR POSCAR
+      cd ..
+   done
+   echo -n " Done!"
+}
+
+function restart_normal()
+{
    #find highest numeric subfolder
    n="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
    n=$((n+1))
+   if [ "$n" -ge "$MAXRUNS" ]; then
+      echo "Maximum number of runs reached, exiting!"
+      exit 1
+   fi
    echo -n "Moving files to subdir ${n}, "
    mkdir ${n} || { echo 'mkdir failed' ; exit 1; }
    #move all files to subfolder n, except these:
@@ -100,7 +134,14 @@ function restart()
 
    #save space by creating symlinks
    echo -n "Create symlinks..."
-   ln -s ./${n}/CONTCAR POSCAR
+   if grep -i "[[:space:]]*ICHAIN[[:space:]]*\=[[:space:]]*2" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHAIN[[:space:]]*\=[[:space:]]*2"
+   then
+      echo -n "DIMER run detected!"
+      ln -s ./${n}/CENTCAR POSCAR
+      ln -s ./${n}/NEWMODECAR MODECAR
+   else
+      ln -s ./${n}/CONTCAR POSCAR
+   fi
    echo "... Done!"
 
    if [[ -s ./${n}/WAVECAR ]] && [[ -s ./${n}/CHGCAR ]]; then #WAVECAR and CHGCAR restart
@@ -114,7 +155,48 @@ function restart()
       exit 1
    fi
 
-   echo "Resubmit your calculation now"
+}
+
+function restart()
+{
+   #check for interruptfile at beginning and end
+   if [ -e "$INTERRUPTFILE" ];
+   then
+      echo "Interruptfile found, exiting."
+      exit 1
+   fi
+   if [ -e "STOPCAR" ];
+   then
+      echo "STOPCAR found, this should have been deleted by VASP. Aborting restart."
+      exit 1
+   fi
+
+   echo -n "Checking if Job finished while waiting..."
+   if grep -iq "aborting loop because hard stop was set" OUTCAR
+   then
+      echo " not the case, continuing with restart"
+   else
+      echo " seems like it. Or there might be another problem. Not restarting."
+      exit 0
+   fi
+   echo "Preparing restart..."
+   #NEB runs need another restart function
+   if grep -i "[[:space:]]*ICHAIN[[:space:]]*\=[[:space:]]*0" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHAIN[[:space:]]*\=[[:space:]]*0"
+   then
+      echo "NEB run detected!"
+      restart_neb
+   else
+      restart_normal
+   fi
+
+   #check for interruptfile
+   if [ -e "$INTERRUPTFILE" ];
+   then
+      echo "Interruptfile found, exiting."
+      exit 1
+   else
+      echo "Resubmit your calculation now"
+   fi
 }
 
 restart
