@@ -94,9 +94,11 @@ function restart_neb()
    fi
    echo -n "Moving files to subdir ${n}-NEB, "
    mkdir ${n}-NEB || { echo 'mkdir failed' ; exit 1; }
-   #move files to subfolder n-NEB
-   mv vasprun.xml ./${n}-NEB/
-   mv *.out ./${n}-NEB/
+   #move all files to subfolder n-NEB, except these:
+   #not sure why joint f l does not work, so have to run second time for symlinks
+   echo -n "Ignoring these files: ${ignore[*]}, moving all others..."
+   find . -maxdepth 1 -type f -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}-NEB/ {} + || { echo 'moving files failed' ; exit 1; }
+   find . -maxdepth 1 -type l -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}-NEB/ {} + || { echo 'moving symlinks failed' ; exit 1; }
 
    nImages="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
    echo -n "processing ${nImages} images: "
