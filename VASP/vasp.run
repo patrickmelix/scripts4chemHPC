@@ -98,7 +98,14 @@ function set_chgcar()
 
 function restart_neb()
 {
-   echo "Preparing restart..."
+   echo -n "Checking if Job finished while waiting..."
+   if grep -iq "aborting loop because hard stop was set" 01/OUTCAR
+   then
+      echo " not the case, continuing with restart"
+   else
+      echo " seems like it. Or there might be another problem. Not restarting."
+      exit 0
+   fi
    #find highest numeric subfolder with -NEB
    n="$(find . -maxdepth 1 -name "*[0-9]-NEB" -type d | sort -Vr | head -1 | sed 's/.\///' | sed 's/-NEB//')"
    n=$((n+1))
@@ -106,16 +113,23 @@ function restart_neb()
       echo "Maximum number of runs reached, exiting!"
       exit 1
    fi
+
+   #find number of images
+   nImages="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
+   echo "Found $((nImages-1)) images."
+
    echo -n "Moving files to subdir ${n}-NEB, "
    mkdir ${n}-NEB || { echo 'mkdir failed' ; exit 1; }
    #move all files to subfolder n-NEB, except these:
-   #not sure why joint f l does not work, so have to run second time for symlinks
-   echo -n "Ignoring these files: ${ignore[*]}, moving all others..."
+   #also need to add 00 and last folder in case they are symlinks
+   ignore+=("$(printf "%02d" $nImages)")
+   ignore+=("00")
+   echo -n "ignoring these files: ${ignore[*]}, moving all others..."
    find . -maxdepth 1 -type f -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}-NEB/ {} + || { echo 'moving files failed' ; exit 1; }
+   #not sure why joint f l does not work, so have to run second time for symlinks
    find . -maxdepth 1 -type l -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}-NEB/ {} + || { echo 'moving symlinks failed' ; exit 1; }
 
-   nImages="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
-   echo -n "processing ${nImages} images: "
+   echo -n " Processing $((nImages-1)) images: "
    for (( i=1; i<$nImages; i++  ))
    do
       pi=$(printf "%02d" $i)
@@ -127,11 +141,19 @@ function restart_neb()
       ln -s ../${n}-NEB/$pi/CONTCAR POSCAR
       cd ..
    done
-   echo -n " Done!"
+   echo " Done!"
 }
 
 function restart_normal()
 {
+   echo -n "Checking if Job finished while waiting..."
+   if grep -iq "aborting loop because hard stop was set" OUTCAR
+   then
+      echo " not the case, continuing with restart"
+   else
+      echo " seems like it. Or there might be another problem. Not restarting."
+      exit 0
+   fi
    #find highest numeric subfolder
    n="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
    n=$((n+1))
@@ -187,14 +209,6 @@ function restart()
       exit 1
    fi
 
-   echo -n "Checking if Job finished while waiting..."
-   if grep -iq "aborting loop because hard stop was set" OUTCAR
-   then
-      echo " not the case, continuing with restart"
-   else
-      echo " seems like it. Or there might be another problem. Not restarting."
-      exit 0
-   fi
    echo "Preparing restart..."
    #NEB runs need another restart function
    if grep -i "[[:space:]]*ICHAIN[[:space:]]*\=[[:space:]]*0" INCAR | grep -qv "[[:space:]]*#[[:space:]]*ICHAIN[[:space:]]*\=[[:space:]]*0"
