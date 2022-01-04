@@ -20,6 +20,6 @@ Happy for any contributions.
 
 ## VASP
 
-* VASP runscript with automatic GO restart/continuation.
+* VASP runscript with automatic GO, DIMER and NEB restart/continuation.
 * Script to combine all `vasprun.xml` recursively into one ASE-xyz trajectory.
 * Script to extract magnetization of all OUTCARs in subdirs of the current folder (helpful during NEB)
