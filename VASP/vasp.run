@@ -1,11 +1,28 @@
 #!/bin/bash
+#General Job Setup
 #SBATCH --job-name="GO"
-#SBATCH -N 4
-#SBATCH --ntasks-per-node=24
-#SBATCH --mem-per-cpu=4400MB
-#SBATCH -t 04:00:00
-#SBATCH -p short
-#SBATCH --signal=B:12@600 #send signal 12 to batch script only (B) 10min before kill
+#SBATCH --exclusive #full nodes only
+#SBATCH -t 4:00:00 #walltime
+#SBATCH --nodes=12 #number of nodes
+#SBATCH --signal=B:12@600 #send signal 12 to batch script only (B) 10min before kill to enable restart
+#SBATCH --mail-type=ALL #recieve mails so you don't forget this job is running
+#SBATCH --mail-user=youradress@domain.com
+
+#Cluster Specific Sections
+##NERSC
+##SBATCH -A m538_g #project m538 or m538_g
+##SBATCH --constraint="gpu" #gpu, haswell, knl
+##SBATCH --gpus-per-node=4
+##SBATCH --qos="regular" #regular, flex or priority
+##SBATCH --licenses="SCRATCH"
+
+##Quest
+#SBATCH --ntasks-per-node=52
+##SBATCH --mem-per-cpu=4400MB #if not exclusive
+#SBATCH --mem=0 #if exclusive take all the memory
+#SBATCH -p short #short (4h max) or normal (48h ,ax)
+#SBATCH -A p31389 #project
+#SBATCH --constraint="[quest7|quest8|quest9|quest10]" ### you want nodes to be from one platform, not a combination of platforms. Important for MPI
 ########################################################################
 # README
 #
@@ -21,8 +38,9 @@
 # -
 #
 # Supports (tested):
-# - Automatic restart of GO, DIMER and NEB runs until convergence
+# - Automatic restart of GO, DIMER and NEB runs until convergence (DIMER and NEB from VTST)
 # - Settings in INCAR to use WAVECAR and CHGCAR files (automatically detected and INCAR changed accordingly). NOT for NEB yet!
+# - Exiting after the current job is done by creating the $INTERRUPTFILE
 #
 #
 ##################
@@ -31,15 +49,46 @@
 # Defaults
 # change with care to suit your setup
 ##################
-ISTART_RESTART=1 #https://www.vasp.at/wiki/index.php/ISTART, if you want continous GO with varying volume you might want to change to 2
-module load vasp/5.4.4-vtst-openmpi-4.0.5-intel-19.0.5.281
-export SLURM_MPI_TYPE=pmix_v3
-INTERRUPTFILE="EXIT"
-MPIBIN="mpirun -n $SLURM_NTASKS"
-VASPBIN="vasp_std" # change vasp_std to vasp_gam for gamma only
-MAXRUNS=50 # Maximum number of runs
+#if you want continous GO with varying volume you might want to change to 2
+ISTART_RESTART=1 #https://www.vasp.at/wiki/index.php/ISTART
+
+#VASP module to use
+module load vasp/6.2.0-vtst-openmpi-4.0.5-intel-19.0.5.281-cuda-11.2.1 #Quest
+#module load vasp-tpc/6.2.1-gpu #Perlmutter
+#module load vasp-tpc/6.2.1-hsw #Haswell
+#module load vasp-tpc/6.2.1-knl #KNL
+
+#MPI Setup
+# -nX number of mpi processes total
+# -cX number of cores per mpi process
+# -G X number of GPUs total
+# E.g. Perlmutter has 1 socket with 64 cores and 2 tasks per core:
+# Therefore -nX should be nNodes*nGPUsTotal
+# and -cX should be 64*2/nGPUsPerNode
+THREADSperCORE=$(lscpu | grep 'Thread(s) per core' | awk '{print $4}')
+echo "THREADSperCORE $THREADSperCORE" #works
+echo "SLURM_CPUS_ON_NODE  $SLURM_CPUS_ON_NODE" #works
+TOTALcpu=$(( $SLURM_JOB_NUM_NODES * $SLURM_CPUS_ON_NODE ))
+echo "TOTALcpu $TOTALcpu"
+NMPITASKS=$(( $TOTALcpu / $THREADSperCORE ))
+echo "NMPITAKS $NMPITASKS"
+
+#Should work on most clusters with CPU only and srun
+#MPIBIN="srun -n${NMPITASKS} -c${THREADSperCORE} --cpu_bind=cores"
+#No automatic way for GPUs yet
+#MPIBIN="srun -n16 -c32 --cpu-bind=cores --gpu-bind=single:1 -G 16" #Perlmutter GPU
+#Use mpirun instead of srun for older clusters
+MPIBIN="mpirun -n $NMPITASKS" #quest
+
+VASPBIN="vasp_gam" # change vasp_std to vasp_gam for gamma only
+
+MAXRUNS=4 # Maximum number of runs
+
 RUNSCRIPT="vasp.run" # name of this file, $(basename $0) does not work, it is overwritten by SLURM sometimes...
+
 ignore=("KPOINTS" "POTCAR" "$RUNSCRIPT" "INCAR") # files that stay where they are during restart
+
+INTERRUPTFILE="EXIT"
 ########################################################################
 
 ##################
