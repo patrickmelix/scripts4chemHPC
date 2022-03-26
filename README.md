@@ -3,6 +3,10 @@ My set of useful HPC scripts for chemistry software packages. Very basic but hel
 
 Happy for any contributions.
 
+## General SLURM
+
+* Helpful aliases for all kinds of SLURM commands.
+
 ## CP2K
 
 * Scripts to run GO and MD with limited walltime and automatic restart.
