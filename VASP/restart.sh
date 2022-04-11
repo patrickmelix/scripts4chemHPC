@@ -111,6 +111,9 @@ function restart_neb()
    find . -maxdepth 1 -type f -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}-NEB/ {} + || { echo 'moving files failed' ; exit 1; }
    #not sure why joint f l does not work, so have to run second time for symlinks
    find . -maxdepth 1 -type l -not -name "${ignore[0]}" $(printf -- '-not -name %s ' "${ignore[@]:1}") -exec mv -t ./${n}-NEB/ {} + || { echo 'moving symlinks failed' ; exit 1; }
+   #create symlinks to 00 and last folder, makes analysis easier
+   ln -s ../00 ./${n}-NEB/00
+   ln -s ../"$(printf "%02d" $nImages)" ./${n}-NEB/"$(printf "%02d" $nImages)"
 
    echo -n " Processing $((nImages-1)) images: "
    for (( i=1; i<$nImages; i++  ))
