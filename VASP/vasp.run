@@ -13,6 +13,7 @@
 ##SBATCH -A m538_g #project m538 or m538_g
 ##SBATCH --constraint="gpu" #gpu, haswell, knl
 ##SBATCH --gpus-per-node=4
+##SBATCH --gpu-bind=none #none, per_task:1, single:1
 ##SBATCH --qos="regular" #regular, flex or priority
 ##SBATCH --licenses="SCRATCH"
 
@@ -68,9 +69,9 @@ module load vasp/6.2.0-vtst-openmpi-4.0.5-intel-19.0.5.281-cuda-11.2.1 #Quest
 THREADSperCORE=$(lscpu | grep 'Thread(s) per core' | awk '{print $4}')
 echo "THREADSperCORE $THREADSperCORE" #works
 echo "SLURM_CPUS_ON_NODE  $SLURM_CPUS_ON_NODE" #works
-TOTALcpu=$(( $SLURM_JOB_NUM_NODES * $SLURM_CPUS_ON_NODE ))
+TOTALcpu=$(( SLURM_JOB_NUM_NODES * SLURM_CPUS_ON_NODE ))
 echo "TOTALcpu $TOTALcpu"
-NMPITASKS=$(( $TOTALcpu / $THREADSperCORE ))
+NMPITASKS=$(( TOTALcpu / THREADSperCORE ))
 echo "NMPITAKS $NMPITASKS"
 
 #Should work on most clusters with CPU only and srun
@@ -88,7 +89,9 @@ RUNSCRIPT="vasp.run" # name of this file, $(basename $0) does not work, it is ov
 
 ignore=("KPOINTS" "POTCAR" "$RUNSCRIPT" "INCAR") # files that stay where they are during restart
 
-INTERRUPTFILE="EXIT"
+INTERRUPTFILE="EXIT" # create this file to prevent auto restart manually
+
+NELDML="-1" # When using a WAVECAR to restart, change the value of NELDML to this one. Comment out or leave empty to disable.
 ########################################################################
 
 ##################
@@ -238,6 +241,9 @@ function restart_normal()
       set_wavecar_chgcar $n
    elif [[ -s ./${n}/WAVECAR ]]; then #WAVECAR restart
       set_wavecar $n
+      if [[ ! -z ${NELDML} ]]; then #set NELDML
+         set_incar_option NELDML ${NELDML}
+      fi
    elif [[ -s ./${n}/CHGCAR ]]; then #CHGCAR restart
       set_chgcar $n
    else

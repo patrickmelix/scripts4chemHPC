@@ -13,7 +13,7 @@
 # -
 #
 # Supports (tested):
-# - Automatic restart of GO, DIMER and NEB runs until convergence
+# - Automatic restart of GO, DIMER and NEB runs until convergence (DIMER and NEB from VTST)
 # - Settings in INCAR to use WAVECAR and CHGCAR files (automatically detected and INCAR changed accordingly). NOT for NEB yet!
 #
 #
@@ -26,7 +26,10 @@
 RUNSCRIPT="vasp.run" # name of the runscript
 ISTART_RESTART=1 #https://www.vasp.at/wiki/index.php/ISTART, if you want continous GO with varying volume you might want to change to 2
 ignore=("KPOINTS" "POTCAR" "$RUNSCRIPT" "INCAR") # files that stay where they are during restart
-INTERRUPTFILE="EXIT"
+
+INTERRUPTFILE="EXIT" # create this file to prevent auto restart manually
+
+NELDML="-1" # When using a WAVECAR to restart, change the value of NELDML to this one. Comment out or leave empty to disable.
 ########################################################################
 
 ##################
@@ -168,6 +171,9 @@ function restart_normal()
       set_wavecar_chgcar $n
    elif [[ -s ./${n}/WAVECAR ]]; then #WAVECAR restart
       set_wavecar $n
+      if [[ ! -z ${NELDML} ]]; then #set NELDML
+         set_incar_option NELDML ${NELDML}
+      fi
    elif [[ -s ./${n}/CHGCAR ]]; then #CHGCAR restart
       set_chgcar $n
    else
