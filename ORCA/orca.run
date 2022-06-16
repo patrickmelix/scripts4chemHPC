@@ -42,11 +42,12 @@ ORCAMEMMULT=0.7 # multiply physical memory with this factor for the value given 
 ORCAINPUT="orca.inp"
 STRUCTURE="input.xyz"
 RUNSCRIPT="orca.run" # $(basename $0) does not work, it is overwritten by SLURM on Quest...
+INTEGRALFILE="$SLURM_JOB_NAME" # Change if you changed the default ORCA name and want to reuse integrals
 INTERRUPTFILE="stop" # create this file in the main submission directory to prevent resubmission
 MAXRUNS=10 # Maximum number of runs
 module load orca # Module to load
 ORCABIN=$(which orca) # we need the full path!
-ignore=("$RUNSCRIPT" "$INTERRUPTFILE" "full_traj.xyz" "traj.xyz" "$ORCAINPUT") #files that stay where they are during restart
+ignore=("$RUNSCRIPT" "$INTERRUPTFILE" "full_traj.xyz" "$ORCAINPUT" "$INTEGRALFILE") #files that stay where they are during restart
 ########################################################################
 
 ##################
@@ -150,7 +151,7 @@ function cleanup_numfreq()
    done
    removeOnNodes
 }
-function restart()
+function prepare_restart()
 {
    echo "Preparing restart..."
    listOnNodes
@@ -162,6 +163,9 @@ function restart()
    cd $SLURM_SUBMIT_DIR
    #cleanup
    removeOnNodes
+}
+function restart()
+{
    #find highest numeric subfolder
    n="$(find . -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
    n=$((n+1))
@@ -213,6 +217,17 @@ function restart()
       fi
       sed -i "/.*scf.*/a\ Guess MORead\n MOInp \"restart.gbw\"" "$ORCAINPUT"
    fi
+   #set integral file restart options
+   if grep -i "KeepInts[[:space:]]*True" "$ORCAINPUT" | grep -qv "[[:space:]]*#[[:space:]]*KeepInts[[:space:]]*True"
+   then
+      if grep -i "[[:space:]]*ReadInts[[:space:]]*True" "$ORCAINPUT" | grep -qv "[[:space:]]*#[[:space:]]*ReadInts[[:space:]]*True"
+      then
+         echo "- ReadInts already set"
+      else
+         echo "- Setting ReadInts Key"
+         sed -i "/.*keepints.*/a\ ReadInts true" "$ORCAINPUT"
+      fi
+   fi
    echo "... Done!"
 
    #check for interruptfile
@@ -226,7 +241,7 @@ function restart()
    fi
 }
 #trap the signal, terminate all children but not the script itself
-trap 'trap " " SIGTERM; kill 0; wait; restart; exit 0' 12 15 18 #15 and 18 are getting sent before killing by slurm on quest
+trap 'trap " " SIGTERM; kill 0; wait; prepare_restart; restart; exit 0' 12 15 18 #15 and 18 are getting sent before killing by slurm on quest
 #trap 'srun -n ${SLURM_JOB_NUM_NODES} --ntasks-per-node=1 echo Recovering files from $(hostname -s) : $tdir; ls -la $tdir; mv $tdir $SLURM_SUBMIT_DIR/crash_files_$SLURMD_NODENAME; exit 12' 12
 
 
@@ -264,10 +279,12 @@ fi
 if [ "$EXITSTATUS" -ge 1 ]; then
    echo "Error detected, moving relevant files back."
    cleanup_crash
+   exit 1
 else
    echo "Copying files back after normal exit"
    listOnNodes
    rsyncResultsBack
+   cd $SLURM_SUBMIT_DIR
    removeOnNodes
 fi
 echo "Finishing this at $(date) in $(pwd)"
