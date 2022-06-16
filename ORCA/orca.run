@@ -16,8 +16,8 @@
 # Only tested for GO so far. See the example input file.
 #
 # You need:
-# - Input file, e.g. orca.inp
-# - This script
+# - Input file with the same name as this runscript
+# - This script, filename should be the same as SLURM_JOB_NAME with file extension .run
 # - The orca binary in your $PATH
 #
 # DO NOT CHANGE:
@@ -38,11 +38,12 @@
 # change with care to suit your setup
 ##################
 TMPLOCATION=/tmp # should be a fast filesystem, tmpdir is created in here
-ORCAMEMMULT=0.7 # multiply physical memory with this factor for the value given to ORCA through $ORCAMEM
-ORCAINPUT="orca.inp"
+ORCAMEMMULT=0.8 # multiply physical memory with this factor for the value given to ORCA through $ORCAMEM
+NAME=${SLURM_JOB_NAME}
+ORCAINPUT="${NAME}.in"
 STRUCTURE="input.xyz"
-RUNSCRIPT="orca.run" # $(basename $0) does not work, it is overwritten by SLURM on Quest...
-INTEGRALFILE="$SLURM_JOB_NAME" # Change if you changed the default ORCA name and want to reuse integrals
+RUNSCRIPT="${NAME}.run" # $(basename $0) does not work, it is overwritten by SLURM on Quest...
+INTEGRALFILE="${NAME}" # Change if you changed the default ORCA name and want to reuse integrals
 INTERRUPTFILE="stop" # create this file in the main submission directory to prevent resubmission
 MAXRUNS=10 # Maximum number of runs
 module load orca # Module to load
@@ -58,6 +59,15 @@ echo "Starting at $(date) in $(pwd)"
 echo "Job SLURM ID: $SLURM_JOB_ID"
 
 echo "Name of runscript: $RUNSCRIPT"
+if [ ! -f $RUNSCRIPT ]; then
+   echo "$RUNSCRIPT not found"
+   exit 1
+fi
+
+if [ ! -f $ORCAINPUT ]; then
+   echo "$ORCAINPUT not found"
+   exit 1
+fi
 
 echo "ORCA binary including path: $ORCABIN"
 if [ ! -e "$ORCABIN" ]; then
