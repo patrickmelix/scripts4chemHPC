@@ -61,36 +61,57 @@ function restart()
 
    #save space by creating symlinks
    echo -n "Create symlinks..."
-   [ -e ./${n}/$SLURM_JOB_NAME.xyz ] && ln -s ./${n}/$SLURM_JOB_NAME.xyz $STRUCTURE
-   ln -s ./${n}/$SLURM_JOB_NAME.gbw restart.gbw
-   [ -e ./${n}/$SLURM_JOB_NAME.opt ] && ln -s ./${n}/$SLURM_JOB_NAME.opt restart.opt
+   if [ -e ./${n}/$SLURM_JOB_NAME.xyz ]; then
+      ln -s ./${n}/$SLURM_JOB_NAME.xyz $STRUCTURE
+      RESTART_STRUCTURE="yes"
+   else
+      echo " WARNING: No new coordinate file found, this should only happen if you restart a single point calculation!"
+   fi
+   if [ -e ./${n}/$SLURM_JOB_NAME.gbw ]; then
+      ln -s ./${n}/$SLURM_JOB_NAME.gbw restart.gbw
+      RESTART_GBW="yes"
+   else
+      if [ -z $RESTART_STRUCTURE ]; then
+         echo "Neither structure nor gbw file found, something is wrong?!"
+         exit 1
+      fi
+      echo " WARNING: No gbw file found, this will waste time!"
+   fi
+   if [ -e ./${n}/$SLURM_JOB_NAME.opt ]; then
+      ln -s ./${n}/$SLURM_JOB_NAME.opt restart.opt
+      RESTART_HESSIAN="yes"
+   fi
    #ln -s ./${n}/$SLURM_JOB_NAME.inp "$ORCAINPUT"
    echo "... Done!"
 
    echo "Checking input file for restart settings."
    #set hessian input if GO
-   if grep -iq "opt" "$ORCAINPUT"
-   then
-      if grep -i "[[:space:]]*InHess[[:space:]]*Read" "$ORCAINPUT" | grep -qv "[[:space:]]*#[[:space:]]*InHess[[:space:]]*Read"
+   if [ ! -z $RESTART_HESSIAN ]; then
+      if grep -iq "opt" "$ORCAINPUT"
       then
-         echo "- Hessian Restart already set"
-      else
-         echo "- Setting Hessian Restart Key"
-         sed -i "/.*geom.*/a\ InHess Read\n InHessName \"restart.opt\"" "$ORCAINPUT"
+         if grep -i "[[:space:]]*InHess[[:space:]]*Read" "$ORCAINPUT" | grep -qv "[[:space:]]*#[[:space:]]*InHess[[:space:]]*Read"
+         then
+            echo "- Hessian Restart already set"
+         else
+            echo "- Setting Hessian Restart Key"
+            sed -i "/.*geom.*/a\ InHess Read\n InHessName \"restart.opt\"" "$ORCAINPUT"
+         fi
       fi
    fi
    #set scf guess input
-   if grep -i "[[:space:]]*MOInp[[:space:]]*\"restart.gbw\"" "$ORCAINPUT" | grep -qv "[[:space:]]*#[[:space:]]*MOInp[[:space:]]*\"restart.gbw\""
-   then
-      echo "- SCF Restart already set"
-   else
-      echo "- Setting SCF Restart Key"
-      if grep -iwq "Guess" "$ORCAINPUT"
+   if [ ! -z $RESTART_GBW ]; then
+      if grep -i "[[:space:]]*MOInp[[:space:]]*\"restart.gbw\"" "$ORCAINPUT" | grep -qv "[[:space:]]*#[[:space:]]*MOInp[[:space:]]*\"restart.gbw\""
       then
-         echo "- Removing old Guess Key"
-         sed -i "/\bguess\b/Id" "$ORCAINPUT"
+         echo "- SCF Restart already set"
+      else
+         echo "- Setting SCF Restart Key"
+         if grep -iwq "Guess" "$ORCAINPUT"
+         then
+            echo "- Removing old Guess Key"
+            sed -i "/\bguess\b/Id" "$ORCAINPUT"
+         fi
+         sed -i "/.*scf.*/a\ Guess MORead\n MOInp \"restart.gbw\"" "$ORCAINPUT"
       fi
-      sed -i "/.*scf.*/a\ Guess MORead\n MOInp \"restart.gbw\"" "$ORCAINPUT"
    fi
    #set integral file restart options
    if grep -i "KeepInts[[:space:]]*True" "$ORCAINPUT" | grep -qv "[[:space:]]*#[[:space:]]*KeepInts[[:space:]]*True"
