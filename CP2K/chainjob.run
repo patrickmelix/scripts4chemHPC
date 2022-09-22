@@ -6,14 +6,15 @@
 #SBATCH --licenses=scratch
 #SBATCH --mail-user=myadress@mydomain.com
 #SBATCH --mail-type=ALL
-#SBATCH --signal=INT@120
+#SBATCH --signal=B:12@600 #send signal 12 to batch script only (B) 10min before kill
 ##SBATCH --test-only
 #exit if any command fails
-set -e
+#set -e #CP2K throws error 140 when using EXIT file
 #more advanced pattern matching
 shopt -s extglob
 
-###README
+########################################################################
+# README
 # Automatic Restart Script for CP2K to enable long simulations using CP2Ks own restart features.
 #
 # The PROJECT_NAME will be overwritten with the Jobname from SLURM!
@@ -23,6 +24,7 @@ shopt -s extglob
 #
 #
 #
+########################################################################
 
 ######EDIT THESE
 #search string for steps
@@ -42,13 +44,52 @@ MAXCALC=50
 WALLTIME="07:50:00"
 
 #load modules
-module load CP2K/6.1-intel-2018a
+module load CP2K/9.1-intel-2021a
+
+CP2KBIN="cp2k.popt"
+
+#MPI Setup
+# -nX number of mpi processes total
+# -cX number of cores per mpi process
+# -G X number of GPUs total
+THREADSperCORE=$(lscpu | grep 'Thread(s) per core' | awk '{print $4}')
+echo "THREADSperCORE $THREADSperCORE"
+echo "SLURM_CPUS_ON_NODE  $SLURM_CPUS_ON_NODE" #full CPU count, not only allocated ones
+echo "SLURM_TASKS_PER_NODE  $SLURM_TASKS_PER_NODE" #quest returns N(xnnodes)
+echo "SLURM_NTASKS  $SLURM_NTASKS"
+echo "SLURM_NPROCS  $SLURM_NPROCS"
+echo "SLURM_CPUS_PER_TASK  $SLURM_CPUS_PER_TASK"
+TOTALcpu=$(( $SLURM_JOB_NUM_NODES * $SLURM_CPUS_ON_NODE ))
+echo "TOTALcpu $TOTALcpu"
+if [[ $TOTALcpu != $SLURM_NTASKS ]]; then
+   echo "Seems like you are not using full nodes, using SLURM_NTASKS"
+   NMPITASKS=$SLURM_NTASKS
+else
+   NMPITASKS=$(( $TOTALcpu / $THREADSperCORE ))
+fi
+echo "NMPITAKS $NMPITASKS"
+
+#Should work on most clusters with CPU only and srun
+#MPIBIN="srun -n${NMPITASKS} -c${THREADSperCORE} --cpu_bind=cores"
+#No automatic way for GPUs yet
+#MPIBIN="srun -n16 -c32 --cpu-bind=cores --gpu-bind=single:1 -G 16" #Perlmutter GPU
+#Use mpirun instead of srun for older clusters
+#MPIBIN="mpirun -n $NMPITASKS" #MPI
+MPIBIN="srun --kill-on-bad-exit=1"
+
 
 ###REST SHOULD BE AUTOMATIC
 
 CURRENT=`pwd`
 BASENAME=`basename "$CURRENT"`
 NAME=${SLURM_JOB_NAME}
+INTERRUPTFILE="EXIT"
+
+function terminate()
+{
+   echo "Caught SLURM signal, writing EXIT file"
+   touch $INTERRUPTFILE
+}
 
 INPUT="${NAME}.in"
 if [ ! -f ${INPUT} ]; then
@@ -66,6 +107,10 @@ SCRIPTNAME="${NAME}.run"
 RESTART="${NAME}-1.restart"
 
 MAXSTEPS=`cat ${INPUT} | grep ${steps} | sed 's/[^0-9]*//g'`
+if [ -z ${MAXSTEPS} ]; then
+   echo "${steps} not found in ${INPUT}, critical error!"
+   exit 1
+fi
 
 if [ -f "number.txt" ]; then
    typeset -i n=$(cat number.txt) || { echo 'getting number failed' ; exit 1; }
@@ -80,8 +125,11 @@ else
    echo $oldstep > step.txt
 fi
 
-#run cp2k
-srun cp2k.popt -o ${OUTPUT} -i ${INPUT}
+#trap the signal, terminate all children but not the script itself
+trap 'terminate; wait' 12 #15 and 18 are getting sent before killing by slurm on quest
+$MPIBIN $CP2KBIN -o ${OUTPUT} -i ${INPUT} &
+#wait for trap to hit or job to finish
+wait
 
 #check output
 if [ "$(grep -c "GEOMETRY OPTIMIZATION COMPLETED" ${OUTPUT})" -ge "1" ];
