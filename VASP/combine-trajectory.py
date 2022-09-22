@@ -3,7 +3,9 @@ from ase import io
 from natsort import natsorted
 import glob, os
 
-files = natsorted(glob.glob('**/vasprun.xml', recursive=True))
+files = natsorted(glob.glob('*/vasprun.xml', recursive=True))
+if os.path.isfile('./vasprun.xml'):
+    files.append('./vasprun.xml')
 
 with open('traj.xyz', 'w') as out:
     for f in files:
