@@ -97,11 +97,11 @@ function restart_neb()
       exit 0
    fi
    #find highest numeric subfolder with -NEB
-   n="$(find . -maxdepth 1 -name "*[0-9]-NEB" -type d | sort -Vr | head -1 | sed 's/.\///' | sed 's/-NEB//')"
+   n="$(find . -regextype posix-extended -maxdepth 1 -regex ".\/[0-9]+-NEB" -type d | sort -Vr | head -1 | sed 's/.\///' | sed 's/-NEB//')"
    n=$((n+1))
 
    #find number of images
-   nImages="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
+   nImages="$(find . -regextype posix-extended -maxdepth 1 -regex ".\/[0-9]+" -type d | sort -Vr | head -1 | sed 's/.\///')"
    echo "Found $((nImages-1)) images."
 
    echo -n "Moving files to subdir ${n}-NEB, "
@@ -144,7 +144,7 @@ function restart_normal()
       exit 0
    fi
    #find highest numeric subfolder
-   n="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
+   n="$(find . -regextype posix-extended -maxdepth 1 -regex ".\/[0-9]+" -type d | sort -Vr | head -1 | sed 's/.\///')"
    n=$((n+1))
    echo -n "Moving files to subdir ${n}, "
    mkdir ${n} || { echo 'mkdir failed' ; exit 1; }

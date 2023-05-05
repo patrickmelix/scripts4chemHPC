@@ -66,7 +66,8 @@ module load vasp/6.2.0-vtst-openmpi-4.0.5-intel-19.0.5.281-cuda-11.2.1 #Quest
 # E.g. Perlmutter has 1 socket with 64 cores and 2 tasks per core:
 # Therefore -nX should be nNodes*nGPUsTotal
 # and -cX should be 64*2/nGPUsPerNode
-THREADSperCORE=$(lscpu | grep 'Thread(s) per core' | awk '{print $4}')
+THREADSperCORE=$(lscpu | grep 'Thread(s) per core' | awk '{print $4}') #possiblity 1
+#THREADSperCore=${SLURM_CPUS_PER_TASK} #possibility 2, slurm v>22.05 does not inherit this to srun, set SRUN_CPUS_PER_TASK!
 echo "THREADSperCORE $THREADSperCORE" #works
 echo "SLURM_CPUS_ON_NODE  $SLURM_CPUS_ON_NODE" #works
 TOTALcpu=$(( SLURM_JOB_NUM_NODES * SLURM_CPUS_ON_NODE ))
@@ -159,7 +160,7 @@ function restart_neb()
       exit 0
    fi
    #find highest numeric subfolder with -NEB
-   n="$(find . -maxdepth 1 -name "*[0-9]-NEB" -type d | sort -Vr | head -1 | sed 's/.\///' | sed 's/-NEB//')"
+   n="$(find . -regextype posix-extended -maxdepth 1 -regex ".\/[0-9]+-NEB" -type d | sort -Vr | head -1 | sed 's/.\///' | sed 's/-NEB//')"
    n=$((n+1))
    if [ "$n" -ge "$MAXRUNS" ]; then
       echo "Maximum number of runs reached, exiting!"
@@ -167,7 +168,7 @@ function restart_neb()
    fi
 
    #find number of images
-   nImages="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
+   nImages="$(find . -regextype posix-extended -maxdepth 1 -regex ".\/[0-9]+" -type d | sort -Vr | head -1 | sed 's/.\///')"
    echo "Found $((nImages-1)) images."
 
    echo -n "Moving files to subdir ${n}-NEB, "
@@ -210,7 +211,7 @@ function restart_normal()
       exit 0
    fi
    #find highest numeric subfolder
-   n="$(find . -maxdepth 1 -name "*[0-9]" -type d | sort -Vr | head -1 | sed 's/.\///')"
+   n="$(find . -regextype posix-extended -maxdepth 1 -regex ".\/[0-9]+" -type d | sort -Vr | head -1 | sed 's/.\///')"
    n=$((n+1))
    if [ "$n" -ge "$MAXRUNS" ]; then
       echo "Maximum number of runs reached, exiting!"
